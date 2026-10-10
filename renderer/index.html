@@ -1,0 +1,190 @@
+<!doctype html><meta charset="utf-8"><title>PhoneDrop</title>
+<style>
+@font-face{font-family:"Inter";src:url(fonts/inter.woff2) format("woff2");font-weight:100 900;font-display:block}
+:root{--blue:#4285f4;--ink:#eeeeee;--mute:#9a9aa2;--line:rgba(255,255,255,.1);--surface:rgba(255,255,255,.07);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;height:100%;font:14px/1.4 var(--font);letter-spacing:-.011em;font-feature-settings:"cv11","ss03";color:var(--ink);
+  -webkit-font-smoothing:antialiased;background:#000;overflow:hidden;user-select:none;cursor:default}
+html{height:100%;border:1px solid rgba(255,255,255,.16)}
+header{position:relative;z-index:3;height:44px;padding:0 10px 0 16px;display:flex;justify-content:space-between;align-items:center;-webkit-app-region:drag}
+header button{-webkit-app-region:no-drag}
+header h1{font-size:14px;font-weight:600;margin:0;letter-spacing:-.01em}
+.link{color:var(--blue);cursor:pointer;background:none;border:0;font:inherit;font-size:14px;font-weight:500;padding:2px 6px;border-radius:5px}
+.link:hover{background:rgba(66,133,244,.16)}
+#stage{position:fixed;inset:0;padding-top:44px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#rings{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;shape-rendering:geometricPrecision}
+#rings circle{fill:none}
+#devs{position:relative;display:flex;gap:28px;flex-wrap:wrap;justify-content:center;padding:0 20px}
+.dev{display:flex;flex-direction:column;align-items:center;width:110px;cursor:pointer}
+.bubble{width:84px;height:84px;border-radius:50%;background:#16181d;display:grid;place-items:center;
+  box-shadow:0 0 0 1.5px rgba(255,255,255,.16);transition:transform .2s cubic-bezier(.2,.8,.3,1),box-shadow .2s}
+.bubble svg{width:36px;height:36px;fill:none;stroke:var(--blue);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.dev:hover .bubble{transform:scale(1.05);box-shadow:0 0 0 1.5px rgba(66,133,244,.7)}
+.dev.over .bubble{transform:scale(1.14);box-shadow:0 0 0 3px var(--blue),0 0 30px rgba(66,133,244,.45)}
+.dev b{margin-top:12px;font-weight:600;font-size:15px;letter-spacing:-.016em}
+.dev small{color:var(--mute);font-size:12px;min-height:16px;margin-top:1px}
+#empty{position:relative;text-align:center;padding:0 24px}
+#empty img{border-radius:14px;background:#fff;padding:8px}
+#empty h2{color:var(--blue);font-size:17px;font-weight:600;margin:0 0 14px;letter-spacing:-.014em}
+#empty p{color:var(--mute);margin:14px 0 3px;font-size:13px}
+#url{font:500 14px ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:0;color:var(--ink)}
+#hint{position:relative;color:var(--mute);margin-top:24px;font-size:13px;text-align:center}
+#dock{position:fixed;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;align-items:stretch}
+#lists{padding:0 16px;max-height:150px;overflow:auto}
+#me{text-align:center;padding:10px 0 14px;font-size:13px;line-height:2}
+.chip{display:inline-block;padding:0 8px;border-radius:7px;background:rgba(255,255,255,.14);font-weight:500;font-size:12.5px}
+.chip.blue{background:var(--blue);color:#fff}
+.disc{display:inline-block;border:1.5px solid rgba(255,255,255,.22);border-radius:12px;padding:0 8px;margin-top:2px}
+#lists h3{display:flex;justify-content:space-between;align-items:center;margin:10px 6px 5px;font-size:12px;font-weight:600;color:var(--mute);letter-spacing:-.005em}
+ul{list-style:none;padding:0;margin:0;background:rgba(28,30,36,.82);backdrop-filter:blur(20px);border-radius:10px;
+  box-shadow:0 0 0 .5px rgba(255,255,255,.12);overflow:hidden}
+ul:empty{display:none}
+.th{width:34px;height:34px;border-radius:6px;object-fit:cover;background:#2a2d35;flex:none}
+.th.blank{display:none}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.l{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+#lb{display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.88);backdrop-filter:blur(14px);flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:56px 24px 24px}
+#lb img{max-width:100%;max-height:calc(100% - 60px);border-radius:10px;box-shadow:0 12px 50px rgba(0,0,0,.6)}
+#lb .cap{color:#fff;font-size:13px}
+li{padding:9px 14px;font-weight:450;align-items:center;display:flex;justify-content:space-between;gap:8px;cursor:pointer}
+li+li{border-top:.5px solid var(--line)}
+li:hover{background:rgba(66,133,244,.14)}
+li span:last-child{color:var(--mute);white-space:nowrap;font-size:13px;font-weight:400}
+#outbox li{cursor:default}#outbox li:hover{background:none}#outbox b{cursor:pointer;color:#ff5a52;padding-left:8px;font-weight:500}
+#conn{display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);backdrop-filter:blur(30px);z-index:10;padding-top:44px;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#conn img{padding:10px;background:#fff}
+#dir{font-size:11px;color:var(--mute);word-break:break-all;max-width:360px;margin:10px 0 14px}
+button.btn{border:0;border-radius:7px;padding:6px 16px;margin:4px;background:var(--blue);color:#fff;font:inherit;font-weight:500;cursor:pointer}
+button.btn:hover{filter:brightness(1.1)}
+button.btn:active{filter:brightness(.9)}
+button.alt{background:rgba(255,255,255,.14);color:var(--ink)}
+.over-all #stage{background:rgba(66,133,244,.08)}
+</style>
+<header><h1>PhoneDrop</h1><span><button class="link" id="showConn">Connect</button><button class="link" id="pin" title="Keep open when clicking elsewhere (lets you drag files in from Explorer)">Pin</button></span></header>
+
+<div id="stage">
+  <svg id="rings"></svg>
+  <div id="empty">
+    <h2>Open PhoneDrop on your iPhone or iPad</h2>
+    <img id="qr" width="200" height="200">
+    <p>Scan with your iPhone or iPad camera, or open</p>
+    <div id="url"></div>
+    <p>Looking for devices…</p>
+  </div>
+  <div id="devs"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="dock"><div id="lists">
+  <div id="outboxWrap" style="display:none"><h3>Waiting to be picked up</h3><ul id="outbox"></ul></div>
+  <h3>Received <button class="link" id="open" style="text-transform:none;letter-spacing:0;font-size:12px">Open folder</button></h3>
+  <ul id="list"></ul>
+</div>
+<div id="me">You are known as: <span class="chip" id="pcname">…</span><br><span class="disc">You can be discovered: <span class="chip blue">on this network</span></span></div></div>
+
+<div id="lb"><img id="lbimg"><div class="cap"><span id="lbname"></span> &nbsp; <button class="btn" id="lbshow">Show in folder</button><button class="btn alt" id="lbclose">Close</button></div></div>
+
+<div id="conn">
+  <img id="qr2" width="220" height="220" style="border-radius:16px">
+  <p style="color:var(--mute);margin:10px 0 2px">Scan with your iPhone or iPad camera, or open</p>
+  <div id="url2" style="font:500 13px ui-monospace,Menlo,Consolas,monospace"></div>
+  <div id="dir"></div>
+  <div><button class="btn alt" id="change">Change save folder</button><button class="btn" id="closeConn">Done</button></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const PHONE='<svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>';
+const TABLET='<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M11 18h2"/></svg>';
+let state={devices:[],outbox:[]};
+// Concentric rings fanning out from the bottom centre (SVG so lines stay crisp)
+(function(){
+  const svg=$('rings'),NS='http://www.w3.org/2000/svg';
+  const cx=innerWidth/2,cy=innerHeight-62,far=Math.hypot(innerWidth,innerHeight);
+  const mk=(r,attrs)=>{const c=document.createElementNS(NS,'circle');c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r',r);
+    for(const k in attrs)c.setAttribute(k,attrs[k]);svg.append(c);return c};
+  for(let k=1;k*170<far+170;k++){
+    const c=mk(k*170,{stroke:'#fff','stroke-width':1,'stroke-opacity':.1});
+    c.animate([{strokeOpacity:.07},{strokeOpacity:.22},{strokeOpacity:.07}],{duration:5000,iterations:Infinity,delay:-k*350})}
+  for(let k=0;k<3;k++){
+    const w=mk(10,{stroke:'#4285f4','stroke-width':1.5,'stroke-opacity':0});
+    w.animate([{r:'10px',strokeOpacity:.85},{r:far+'px',strokeOpacity:0}],
+      {duration:6000,iterations:Infinity,delay:-k*2000,easing:'cubic-bezier(.2,.5,.4,1)'})}
+})();
+function show(i){
+  $('qr').src=i.qr;$('qr2').src=i.qr;$('url').textContent=i.url;$('url2').textContent=i.url;
+  $('dir').textContent='Saving to: '+i.saveDir;$('pcname').textContent=i.pc}
+api.info().then(show);
+$('open').onclick=()=>api.openFolder();
+$('change').onclick=()=>api.chooseFolder().then(show);
+let pinned=false;
+$('pin').onclick=()=>{pinned=!pinned;api.setPinned(pinned);$('pin').textContent=pinned?'Unpin':'Pin'};
+$('showConn').onclick=()=>$('conn').style.display='flex';
+$('closeConn').onclick=()=>$('conn').style.display='none';
+
+// Thumbnails come from the OS thumbnailer in the main process; blank if not an image
+function thumb(path,size,img){api.thumb(path,size).then(u=>{if(u)img.src=u;else img.classList.add('blank')})}
+function row(name,right,path){const li=document.createElement('li');
+  li.innerHTML='<span class="l"><img class="th blank"><span class="nm"></span></span><span></span>';
+  li.querySelector('.nm').textContent=name;li.lastChild.innerHTML=right;
+  if(path){const im=li.querySelector('.th');im.classList.remove('blank');thumb(path,68,im)}
+  return li}
+async function openLightbox(f){
+  const u=await api.thumb(f.path,1600);if(!u){api.showFile(f.path);return}
+  $('lbimg').src=u;$('lbname').textContent=f.name;$('lb').style.display='flex';
+  $('lbshow').onclick=()=>api.showFile(f.path)}
+$('lbclose').onclick=()=>$('lb').style.display='none';
+$('lb').onclick=e=>{if(e.target.id==='lb')$('lb').style.display='none'};
+addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('lb').style.display==='flex')$('lb').style.display='none';else if($('conn').style.display==='flex')$('conn').style.display='none';else api.hide()});
+const mb=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.ceil(n/1024)+' KB';
+
+function render(){
+  const {devices,outbox}=state;
+  $('empty').style.display=devices.length?'none':'block';
+  $('hint').textContent=devices.length?'Drop files onto a device, or click it to choose files':'';
+  const box=$('devs');
+  if(box.dataset.sig!==devices.map(d=>d.id).join()){
+    box.dataset.sig=devices.map(d=>d.id).join();box.innerHTML='';
+    for(const d of devices){
+      const el=document.createElement('div');el.className='dev';el.dataset.id=d.id;
+      el.innerHTML='<div class="bubble">'+(d.name.startsWith('iPad')?TABLET:PHONE)+'</div><b></b><small></small>';
+      el.querySelector('b').textContent=d.name;
+      el.onclick=()=>api.pickFiles(d.id).then(o=>{state.outbox=o;render()});
+      el.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();el.classList.add('over')});
+      el.addEventListener('dragleave',()=>el.classList.remove('over'));
+      el.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();el.classList.remove('over');
+        document.body.classList.remove('over-all');
+        api.addDropped(e.dataTransfer.files,d.id).then(o=>{state.outbox=o;render()})});
+      box.append(el);
+    }
+  }
+  for(const el of box.children){
+    const n=outbox.filter(o=>o.to===el.dataset.id||o.to===null).length;
+    el.querySelector('small').textContent=n?n+' file'+(n>1?'s':'')+' waiting':'Ready';
+  }
+  const ul=$('outbox');ul.innerHTML='';
+  $('outboxWrap').style.display=outbox.length?'block':'none';
+  for(const f of outbox){
+    const dev=devices.find(d=>d.id===f.to);
+    const li=row(f.name,mb(f.size)+' → '+(f.to===null?'any device':dev?dev.name:'offline')+' <b title="Remove">✕</b>',f.path);
+    li.querySelector('b').onclick=()=>api.removeFile(f.id).then(o=>{state.outbox=o;render()});
+    ul.append(li);
+  }
+}
+// Keep the device bubbles clear of the lists docked at the bottom
+new ResizeObserver(()=>{$('stage').style.paddingBottom=$('dock').offsetHeight+'px'}).observe($('dock'));
+async function tick(){state=await api.devices();render()}
+tick();setInterval(tick,1500);
+
+// Dropping anywhere: goes to the only device, or hint to drop on one
+addEventListener('dragover',e=>{e.preventDefault();document.body.classList.add('over-all')});
+addEventListener('dragleave',e=>{if(!e.relatedTarget)document.body.classList.remove('over-all')});
+addEventListener('drop',e=>{e.preventDefault();document.body.classList.remove('over-all');
+  if(state.devices.length===1)api.addDropped(e.dataTransfer.files,state.devices[0].id).then(o=>{state.outbox=o;render()});
+  else if(!state.devices.length)api.addDropped(e.dataTransfer.files,null).then(o=>{state.outbox=o;render()});
+  else $('hint').textContent='Drop the files onto a specific device'});
+
+api.onReceived(f=>{const li=row(f.name,mb(f.size),f.path);
+li.onclick=()=>openLightbox(f);$('list').prepend(li)});
+</script>
