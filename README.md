@@ -92,7 +92,8 @@ tucks itself back. **Pin** keeps it open while you drag files in. Starts with yo
 
 > [!NOTE]
 > **Private by design.** Files and clipboard go from device to device over your own network. There is no cloud, no account and no
-> tracking, and PhoneDrop never contacts anything on the internet.
+> tracking. PhoneDrop only contacts the internet if you turn on **Check for updates** (or choose *Check for updates…*), and then
+> only to ask GitHub whether there's a new version.
 
 ---
 
@@ -135,6 +136,7 @@ PhoneDrop runs a small **hub** on one of your computers; your other devices conn
 | **See a received photo** | Click it in the *Received* list for a large preview, with a button to show it in its folder. |
 | **Change where files are saved** | Click **Connect**, then **Change save folder**. |
 | **Change the hub, passphrase or name** | Click **Settings** in the popup. |
+| **Get updates** | Turn on **Check for updates automatically** in Settings, or choose **Check for updates…** from the tray menu. On Windows the update downloads by itself and installs when PhoneDrop restarts (or click **Restart to update**). On a Mac, click **Download**, then drag PhoneDrop into Applications. |
 | **Turn off start-at-login, open the folder or quit** | Right-click the tray or menu-bar icon. |
 
 ---
@@ -224,12 +226,15 @@ cd phonedrop
 npm install
 npm start                  # run it (shows the popup once; add -- --hidden to start in the tray)
 npm run dist:mac           # on a Mac: dist/PhoneDrop-<version>-arm64.dmg
-npm run dist:win           # on a Mac: dist/PhoneDrop Setup <version>.exe
+npm run dist:win           # on a Mac: dist/PhoneDrop-Setup-<version>.exe + latest.yml
 bash build-installer.sh    # on Windows: dist/PhoneDrop Setup <version>.exe
 ```
 
 `build-installer.sh` packs the app, stamps the icon with `rcedit`, then wraps it in an NSIS installer. It avoids
 `electron-builder`'s code-signing download, which needs symlink privileges on Windows. `npm run icons` regenerates the icons.
+
+**Releasing:** attach `latest.yml`, the `.exe`, its `.blockmap` and the `.dmg` to the GitHub release. Windows installs find
+updates through `latest.yml`; Macs read the release list and download the `-arm64.dmg`.
 
 | Path | Purpose |
 | --- | --- |
@@ -238,6 +243,7 @@ bash build-installer.sh    # on Windows: dist/PhoneDrop Setup <version>.exe
 | `renderer/` | The popup on your computer |
 | `core/sync.js` | Sync engine: clipboard, files, who's online, Wi-Fi/Tailscale switching |
 | `core/clipboard.js` | Reads and writes the computer's clipboard (text and images) |
+| `core/updates.js` | Optional update checks (Windows installs automatically; Mac downloads the new version) |
 | `server/` | The hub: relay, encrypted file storage, HTTPS certificate, network detection |
 | `shared/` | Encryption and connection logic shared by computers and phones |
 | `web/` | The page served to your iPhone or iPad |

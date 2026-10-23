@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+- **Updates**, opt-in: turn on *Check for updates automatically* in Settings, or choose *Check for updates…* from the tray menu.
+  On Windows, new versions download in the background and install when PhoneDrop restarts (or click *Restart to update*).
+  On a Mac, PhoneDrop shows that a new version is available and downloads it for you, with progress; open it and drag PhoneDrop
+  into Applications. With the setting off, PhoneDrop never contacts the internet.
+
 ## 2.0.1
 
 - Fixed: clipboard sync didn't send anything from Mac or Windows. PhoneDrop now uses Electron's newer, asynchronous

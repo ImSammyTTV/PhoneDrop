@@ -1,6 +1,6 @@
 {
   "name": "phonedrop",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Send files and share your clipboard between your iPhone, iPad, Mac and PC, over Wi-Fi at home and Tailscale away",
   "author": "ImSammyTTV",
   "license": "MIT",
@@ -9,11 +9,12 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win -c.win.signAndEditExecutable=true",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never -c.win.signAndEditExecutable=true",
     "icons": "node scripts/make-icons.js && node gen-icon.cjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "node-forge": "^1.4.0",
     "qrcode": "^1.5.4",
     "ws": "^8.18.0"
@@ -51,7 +52,8 @@
       "hardenedRuntime": false,
       "extendInfo": {
         "LSUIElement": true
-      }
+      },
+      "artifactName": "PhoneDrop-${version}-${arch}.${ext}"
     },
     "win": {
       "target": [
@@ -69,7 +71,15 @@
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": true,
-      "shortcutName": "PhoneDrop"
-    }
+      "shortcutName": "PhoneDrop",
+      "artifactName": "PhoneDrop-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ImSammyTTV",
+        "repo": "PhoneDrop"
+      }
+    ]
   }
 }

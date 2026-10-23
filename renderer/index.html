@@ -77,12 +77,21 @@ button.btn:hover{filter:brightness(1.1)}
 button.btn:active{filter:brightness(.9)}
 button.alt{background:rgba(255,255,255,.14);color:var(--ink)}
 .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#update{position:fixed;top:44px;left:12px;right:12px;z-index:6;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:10px;
+  background:rgba(28,30,36,.92);backdrop-filter:blur(20px);box-shadow:0 0 0 .5px rgba(255,255,255,.16),0 8px 24px rgba(0,0,0,.4);font-size:13px}
+#update span{flex:1;min-width:0}
+#update .bar{height:4px;border-radius:2px;background:rgba(255,255,255,.14);margin-top:5px;overflow:hidden}
+#update .bar i{display:block;height:100%;background:var(--blue);transition:width .25s}
+#update button{margin:0;padding:5px 12px;white-space:nowrap}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+.check input{margin-top:2px;accent-color:var(--blue)}
 [hidden]{display:none!important}
 .over-all #stage{background:rgba(66,133,244,.08)}
 </style>
 <header><h1>PhoneDrop</h1><span>
   <button class="link" id="showConn">Connect</button><button class="link" id="pin" title="Keep open when clicking elsewhere (lets you drag files in)">Pin</button><button class="link" id="showSettings">Settings</button>
 </span></header>
+<div id="update" hidden><span><span id="updText"></span><div class="bar" id="updBar" hidden><i id="updFill"></i></div></span><button class="btn" id="updBtn" hidden></button><button class="link" id="updClose" title="Hide">✕</button></div>
 
 <div id="stage">
   <svg id="rings"></svg>
@@ -129,6 +138,8 @@ button.alt{background:rgba(255,255,255,.14);color:var(--ink)}
     <label class="field" id="hubField">Hub address<input id="hubAddress" type="text" placeholder="e.g. My-Mac.local" spellcheck="false"><span class="hint" id="joinAway"></span></label>
     <label class="field">Passphrase<input id="passphrase" type="password" autocomplete="new-password"><span class="hint">At least 8 characters.</span></label>
     <label class="field">Name for this computer<input id="device" type="text" maxlength="40" spellcheck="false"></label>
+    <div><label class="check"><input type="checkbox" id="checkUpdates"><span>Check for updates automatically<small class="hint">Asks GitHub for new versions now and then. Otherwise PhoneDrop never contacts the internet.</small></span></label>
+      <button class="link" type="button" id="checkNow" style="margin:4px 0 0 20px;padding:2px 4px;font-size:13px">Check now</button></div>
     <div class="row"><button class="btn" type="submit" id="save" style="margin-left:0">Save</button><button class="btn alt" type="button" id="closeSettings">Close</button><p id="msg"></p></div>
   </form>
 </div>

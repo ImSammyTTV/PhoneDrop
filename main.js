@@ -11,6 +11,7 @@ import QRCode from 'qrcode';
 import { startHub } from './server/server.js';
 import { computerName, lanAddresses, localHostname, tailscaleAddresses } from './server/network.js';
 import { startSync } from './core/sync.js';
+import { createUpdater } from './core/updates.js';
 import { readClipboard, writeClipboard } from './core/clipboard.js';
 import { hubCandidates } from './shared/connect.js';
 
@@ -20,7 +21,10 @@ const PORT = Number(process.env.PHONEDROP_PORT) || 47615; // override only for a
 const ICON = path.join(ROOT, 'icon.png');
 const KIND = isMac ? 'mac' : 'pc';
 
-if (process.env.PHONEDROP_USER_DATA) app.setPath('userData', process.env.PHONEDROP_USER_DATA);
+if (process.env.PHONEDROP_USER_DATA) {
+  app.setPath('userData', process.env.PHONEDROP_USER_DATA);
+  app.setPath('downloads', path.join(process.env.PHONEDROP_USER_DATA, 'downloads')); // tests never write to your Downloads
+}
 
 // --- Settings ---------------------------------------------------------------
 // Stored in the app's folder, readable only by you (the passphrase too).
@@ -125,6 +129,8 @@ function candidates() {
 }
 
 // What the popup shows.
+let updater = null;
+
 function view() {
   const devices = [...new Map([...(sync?.state.devices.values() ?? [])].map((d) => [d.id, d])).values()];
   const clips = (sync?.state.recent ?? []).filter((c) => c.kind !== 'file').slice(0, 8)
@@ -141,6 +147,7 @@ function view() {
     clips,
     received,
     sent,
+    update: updater ? { ...updater.state } : null,
   };
 }
 
@@ -282,6 +289,7 @@ function renderTrayMenu() {
       click: (item) => setPaused(item.checked),
     },
     { label: 'Settings…', click: openSettings },
+    { label: 'Check for updates…', click: () => { showWindow(); updater?.check({ manual: true }); } },
     {
       label: isMac ? 'Open at login' : 'Start with Windows', type: 'checkbox', checked: autoStartEnabled(),
       click: (item) => {
@@ -326,6 +334,7 @@ ipcMain.handle('settings', () => ({
   device: config.device || computerName(),
   hasPassphrase: !!config.passphrase,
   configured: isConfigured(),
+  checkUpdates: !!config.checkUpdates,
   thisHub: { url: `http://${localHostname()}:${PORT}`, tailscale: tailscaleAddresses() },
   awayAddresses: (config.endpoints?.tailscale || []).map((u) => new URL(u).hostname),
 }));
@@ -347,12 +356,21 @@ ipcMain.handle('saveSettings', async (_e, input) => {
     next.passphrase = input.passphrase;
   }
   if (!next.passphrase) return { ok: false, error: 'Choose a passphrase.' };
+  if (typeof input.checkUpdates === 'boolean') next.checkUpdates = input.checkUpdates;
   config = next;
   saveConfig();
+  updater?.setAutomatic(!!config.checkUpdates);
   await restartServices();
   return hubError ? { ok: false, error: hubError } : { ok: true, hubAddress: config.hubAddress };
 });
 ipcMain.handle('setPaused', (_e, v) => setPaused(v));
+ipcMain.handle('checkUpdates', () => updater?.check({ manual: true }));
+ipcMain.handle('downloadUpdate', () => updater?.download());
+ipcMain.handle('openUpdate', () => updater?.openDownloaded());
+ipcMain.handle('installUpdate', () => {
+  quitting = true; // let the window close so the installer can run
+  updater?.install();
+});
 ipcMain.handle('setPinned', (_e, v) => { pinned = !!v; return pinned; });
 ipcMain.handle('hide', () => win.hide());
 ipcMain.handle('openFolder', () => shell.openPath(saveDir));
@@ -421,6 +439,8 @@ app.whenReady().then(async () => {
   // Normally stays hidden until the tray icon is clicked; a manual launch (or first run) shows it once
   const atLogin = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
   if (!atLogin || !isConfigured()) win.once('ready-to-show', isConfigured() ? showWindow : openSettings);
+  updater = createUpdater({ onChange: changed });
+  updater.setAutomatic(!!config.checkUpdates); // off unless you turned it on in Settings
   await restartServices();
 });
 app.on('window-all-closed', () => {}); // keep running in the tray

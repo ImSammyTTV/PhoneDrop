@@ -60,8 +60,30 @@ function statusChip(s){
   return[s.via==='tailscale'?'Connected over Tailscale':s.via==='local'?'This computer is the hub':'Connected over Wi-Fi','blue'];
 }
 
+// --- Updates ------------------------------------------------------------------
+// The banner shows what the updater is doing. "Checking", "up to date" and errors only
+// appear when you asked for a check yourself.
+let updHidden='';
+function renderUpdate(u){
+  const show=(text,btn,progress)=>{
+    $('updText').textContent=text;$('update').hidden=updHidden===u.status+u.version;
+    $('updBtn').hidden=!btn;if(btn){$('updBtn').textContent=btn[0];$('updBtn').onclick=btn[1]}
+    $('updBar').hidden=progress==null;if(progress!=null)$('updFill').style.width=progress+'%'};
+  if(!u||u.status==='idle'||(!u.manual&&['checking','none','error'].includes(u.status)))return $('update').hidden=true;
+  const v='PhoneDrop '+(u.version||'');
+  if(u.status==='checking')show('Checking for updates…');
+  else if(u.status==='none')show(`You're up to date (${u.version||'latest'})`);
+  else if(u.status==='error')show("Couldn't check for updates: "+u.error);
+  else if(u.status==='available')show(v+' is available',['Download',()=>api.downloadUpdate()]);
+  else if(u.status==='downloading')show(`Downloading ${v}… ${u.progress||0}%`,null,u.progress||0);
+  else if(u.status==='downloaded')show('Downloaded. Open it and drag PhoneDrop into Applications',['Open',()=>api.openUpdate()]);
+  else if(u.status==='ready')show(v+' is ready',['Restart to update',()=>api.installUpdate()]);
+}
+$('updClose').onclick=()=>{updHidden=state.update.status+state.update.version;$('update').hidden=true};
+
 let lastReceived='';
 function render(){
+  renderUpdate(state.update);
   const {devices,clips,received,sent}=state;
   const [label,color]=statusChip(state);$('status').textContent=label;$('status').className='chip '+color;
   if(state.device)$('pcname').textContent=state.device;
@@ -126,18 +148,19 @@ async function openSettings(){
   $('thisHub').textContent=s.thisHub.url;
   $('hubAway').textContent=s.thisHub.tailscale.length?`Away from home, your devices reach it through Tailscale (${s.thisHub.tailscale.join(', ')}).`:"Tailscale isn't running here, so PhoneDrop only works on your home Wi-Fi.";
   $('joinAway').textContent=s.awayAddresses.length?`Away from home: through Tailscale (${s.awayAddresses.join(', ')}).`:"After connecting at home once, PhoneDrop learns the hub's Tailscale address and keeps working when you're away.";
-  $('hubAddress').value=s.hubAddress;$('device').value=s.device;
+  $('hubAddress').value=s.hubAddress;$('device').value=s.device;$('checkUpdates').checked=s.checkUpdates;
   $('passphrase').value='';$('passphrase').required=!s.hasPassphrase;
   $('passphrase').placeholder=s.hasPassphrase?'Saved. Type a new one to change it':'';
   $('closeSettings').hidden=!s.configured;msg('');showRole();
   $('settings').style.display='flex';
 }
 $('showSettings').onclick=openSettings;
+$('checkNow').onclick=()=>{api.checkUpdates();$('settings').style.display=state.configured?'none':'flex'};
 api.onOpenSettings(openSettings);
 $('closeSettings').onclick=()=>$('settings').style.display='none';
 $('form').onsubmit=async e=>{
   e.preventDefault();$('save').disabled=true;msg('Saving…');
-  const r=await api.saveSettings({role:role(),hubAddress:$('hubAddress').value,passphrase:$('passphrase').value,device:$('device').value});
+  const r=await api.saveSettings({role:role(),hubAddress:$('hubAddress').value,passphrase:$('passphrase').value,device:$('device').value,checkUpdates:$('checkUpdates').checked});
   $('save').disabled=false;
   if(!r.ok)return msg(r.error,'error');
   if(r.hubAddress)$('hubAddress').value=r.hubAddress;
