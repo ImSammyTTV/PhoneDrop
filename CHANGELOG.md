@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.1
+
+- Fixed: clipboard sync didn't send anything from Mac or Windows. PhoneDrop now uses Electron's newer, asynchronous
+  clipboard calls for reading and writing text and images.
+
 ## 2.0.0
 
 PhoneDrop now runs on **Mac and Windows**, shares your **clipboard**, and works **away from home**.

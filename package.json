@@ -1,6 +1,6 @@
 {
   "name": "phonedrop",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Send files and share your clipboard between your iPhone, iPad, Mac and PC, over Wi-Fi at home and Tailscale away",
   "author": "ImSammyTTV",
   "license": "MIT",
@@ -42,15 +42,26 @@
       "buildResources": "build"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "build/icon.png",
       "category": "public.app-category.utilities",
       "identity": "-",
       "hardenedRuntime": false,
-      "extendInfo": { "LSUIElement": true }
+      "extendInfo": {
+        "LSUIElement": true
+      }
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "icon.ico",
       "signAndEditExecutable": false
     },

@@ -16,7 +16,7 @@ import { hubCandidates } from './shared/connect.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const isMac = process.platform === 'darwin';
-const PORT = 47615;
+const PORT = Number(process.env.PHONEDROP_PORT) || 47615; // override only for automated tests
 const ICON = path.join(ROOT, 'icon.png');
 const KIND = isMac ? 'mac' : 'pc';
 
@@ -371,8 +371,8 @@ ipcMain.handle('pickFiles', async (_e, to) => {
 ipcMain.handle('copyClip', async (_e, id) => {
   const clip = sync?.state.recent.find((c) => c.id === id);
   if (!clip) return;
-  if (clip.kind === 'image') writeClipboard({ kind: 'image', png: await sync.getData(clip) });
-  else writeClipboard({ kind: 'text', text: clip.text });
+  if (clip.kind === 'image') await writeClipboard({ kind: 'image', png: await sync.getData(clip) });
+  else await writeClipboard({ kind: 'text', text: clip.text });
 });
 ipcMain.handle('chooseFolder', async () => {
   dialogOpen = true;
