@@ -63,7 +63,7 @@
   <path class="head" d="M856 141l-9 9 9 9"/>
 
   <text x="640" y="196" text-anchor="middle" font-size="64" font-weight="700" letter-spacing="-1.5" fill="url(#title)">PhoneDrop</text>
-  <text x="640" y="238" text-anchor="middle" font-size="21" fill="#9a9aa2">Send files between your iPhone, iPad and PC over Wi-Fi</text>
+  <text x="640" y="238" text-anchor="middle" font-size="21" fill="#9a9aa2">Files and clipboard between iPhone, iPad, Mac and PC</text>
 
   <g transform="translate(640 292)" font-size="14" font-weight="600">
     <rect x="-168" y="-16" width="108" height="30" rx="15" fill="#4285f4" fill-opacity=".16" stroke="#4285f4" stroke-opacity=".5"/>

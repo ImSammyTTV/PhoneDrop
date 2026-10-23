@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="theme-color" content="#000000">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<title>Set up PhoneDrop</title>
+</head><body>
+<h1>Set up PhoneDrop</h1><div class="sub">One time, so this device can use PhoneDrop securely</div>
+
+<div class="steps">
+  <h2>1. Install the PhoneDrop certificate</h2>
+  <a class="btn" href="/ca.crt">Download certificate</a>
+
+  <h2>2. Trust it</h2>
+  <p><strong>iPhone / iPad:</strong> tap <em>Allow</em>, then open <em>Settings → General → VPN &amp; Device Management</em>,
+    tap <em>PhoneDrop Local CA</em> and <em>Install</em>. Then go to <em>Settings → General → About →
+    Certificate Trust Settings</em> and switch on <em>PhoneDrop Local CA</em>.</p>
+  <p><strong>Android:</strong> open <em>Settings</em>, search for <em>CA certificate</em>, choose
+    <em>Install anyway</em> and pick the downloaded <em>ca.crt</em>.</p>
+  <p class="note">This certificate can only vouch for devices on your home network or tailnet, never real websites.
+    Your browser needs it before it allows encryption and clipboard access.</p>
+
+  <h2>3. Open PhoneDrop</h2>
+  <a id="open" class="btn primary" href="#">Open PhoneDrop</a>
+  <p class="note">Then tap <em>Share → Add to Home Screen</em> to open it in one tap next time, at home or away.</p>
+</div>
+<script>
+  document.getElementById('open').href = `https://${location.hostname}:{{HTTPS_PORT}}/`;
+</script>
+</body></html>

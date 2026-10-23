@@ -1,34 +1,56 @@
 {
   "name": "phonedrop",
-  "version": "1.1.0",
-  "description": "Receive files from your iPhone into a folder on this PC",
+  "version": "2.0.0",
+  "description": "Send files and share your clipboard between your iPhone, iPad, Mac and PC, over Wi-Fi at home and Tailscale away",
   "author": "ImSammyTTV",
+  "license": "MIT",
+  "type": "module",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win -c.win.signAndEditExecutable=true",
+    "icons": "node scripts/make-icons.js && node gen-icon.cjs"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "node-forge": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "@resvg/resvg-js": "^2.6.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.sam.phonedrop",
     "productName": "PhoneDrop",
     "files": [
       "main.js",
-      "preload.js",
+      "preload.cjs",
       "icon.png",
-      "renderer/**/*"
+      "icons/*.png",
+      "renderer/**/*",
+      "server/**/*",
+      "shared/**/*",
+      "core/**/*",
+      "web/**/*"
     ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "extendInfo": { "LSUIElement": true }
     },
     "win": {
-      "target": "nsis",
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "icon.ico",
       "signAndEditExecutable": false
     },

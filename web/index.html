@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="theme-color" content="#000000">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="PhoneDrop">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<link rel="stylesheet" href="/style.css">
+<title>PhoneDrop</title>
+</head><body>
+<h1>PhoneDrop</h1><div class="sub" id="status">Offline</div>
+
+<section id="setup" hidden>
+  <p class="sub">Use the same passphrase as on your computers. It never leaves this device; everything is encrypted with it.</p>
+  <form id="setup-form">
+    <input id="passphrase" type="password" placeholder="Passphrase" autocomplete="current-password" required minlength="8">
+    <input id="device" placeholder="Name for this device" required maxlength="40">
+    <button type="submit" class="primary">Connect</button>
+  </form>
+</section>
+
+<section id="app" hidden>
+  <div id="stage">
+    <div class="rings"><i></i><i></i><i></i></div>
+    <div id="devs"></div>
+    <div id="off">Looking for your computers…</div>
+  </div>
+  <input id="f" type="file" multiple hidden>
+
+  <div class="actions">
+    <button id="send-clipboard" class="primary">Send my clipboard</button>
+    <form id="compose"><input id="text" placeholder="…or type or paste here"><button type="submit">Send</button></form>
+  </div>
+
+  <div id="uph" hidden><h2>Sending</h2></div>
+  <div id="uploads"></div>
+  <h2 id="recenth" hidden>Recent · tap to copy or save</h2>
+  <div id="clips"></div>
+  <button id="forget" class="link">Forget passphrase on this device</button>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="/app.js"></script>
+</body></html>

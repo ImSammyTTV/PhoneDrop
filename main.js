@@ -1,28 +1,161 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, screen } = require('electron');
-const http = require('http');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const QRCode = require('qrcode');
+// PhoneDrop: an AirDrop-style tray app for Mac and Windows. Send files between
+// your iPhone, iPad and computers, keep the clipboard in sync (text and images),
+// and keep working away from home over Tailscale. One computer runs the hub the
+// other devices connect to; everything is end-to-end encrypted.
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, screen, shell } from 'electron';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import QRCode from 'qrcode';
+import { startHub } from './server/server.js';
+import { computerName, lanAddresses, localHostname, tailscaleAddresses } from './server/network.js';
+import { startSync } from './core/sync.js';
+import { readClipboard, writeClipboard } from './core/clipboard.js';
+import { hubCandidates } from './shared/connect.js';
 
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const isMac = process.platform === 'darwin';
 const PORT = 47615;
+const ICON = path.join(ROOT, 'icon.png');
+const KIND = isMac ? 'mac' : 'pc';
+
+if (process.env.PHONEDROP_USER_DATA) app.setPath('userData', process.env.PHONEDROP_USER_DATA);
+
+// --- Settings ---------------------------------------------------------------
+// Stored in the app's folder, readable only by you (the passphrase too).
+
 const configFile = () => path.join(app.getPath('userData'), 'config.json');
-let saveDir;
-let win;
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(configFile(), 'utf8')); } catch { return {}; }
 }
-function saveConfig(c) { fs.writeFileSync(configFile(), JSON.stringify(c)); }
 
-function lanAddresses() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces()))
-    for (const i of list || [])
-      if (i.family === 'IPv4' && !i.internal) out.push(i.address);
-  // Prefer typical home-router ranges over virtual adapters
-  return out.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
+function saveConfig() {
+  fs.mkdirSync(path.dirname(configFile()), { recursive: true });
+  fs.writeFileSync(configFile(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
+
+let config = loadConfig();
+let saveDir;
+const isConfigured = () => !!(config.passphrase && config.device && (config.role === 'hub' || config.hubAddress));
+
+// Accepts "My-Mac.local", "192.168.1.20:47615" or a full URL.
+function normalizeHubAddress(input) {
+  const raw = input.trim();
+  const url = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`);
+  if (!url.port) url.port = String(PORT);
+  return url.origin;
+}
+
+// --- Hub and sync -----------------------------------------------------------
+
+let hub = null;
+let sync = null;
+let hubError = null;
+let restarting = Promise.resolve();
+const received = []; // files that arrived this session, newest first
+const sent = []; // files sent this session
+
+async function stopServices() {
+  sync?.stop();
+  sync = null;
+  await hub?.close();
+  hub = null;
+}
+
+async function startServices() {
+  await stopServices();
+  hubError = null;
+  if (!isConfigured()) return changed();
+
+  if (config.role === 'hub') {
+    try {
+      hub = await startHub({ port: PORT, certDir: path.join(app.getPath('userData'), 'certs') });
+    } catch (err) {
+      hubError = err.code === 'EADDRINUSE' ? `Port ${PORT} is busy. Is PhoneDrop already running?` : err.message;
+      return changed();
+    }
+  }
+
+  sync = await startSync({
+    candidates,
+    passphrase: config.passphrase,
+    device: config.device,
+    deviceId: config.deviceId,
+    kind: KIND,
+    readClipboard,
+    writeClipboard,
+    saveFile,
+    onEvent(event, state) {
+      if (event.type === 'endpoints' && config.role === 'join') {
+        config.endpoints = state.endpoints; // the hub's Tailscale address, for when you're away
+        saveConfig();
+      }
+      if (event.type === 'received-file') {
+        const c = event.clip;
+        received.unshift({ id: c.id, name: path.basename(c.savedPath), size: c.size, from: c.from, path: c.savedPath });
+        received.length = Math.min(received.length, 50);
+        if (!win?.isVisible()) notify(c.name, `From ${c.from}`, () => shell.showItemInFolder(c.savedPath));
+      }
+      if (event.type === 'sent' && event.clip.kind === 'file') {
+        const to = event.clip.to && [...state.devices.values()].find((d) => d.id === event.clip.to);
+        sent.unshift({ name: event.clip.name, size: event.clip.size, to: to ? to.name : 'all devices' });
+        sent.length = Math.min(sent.length, 20);
+      }
+      if (event.type === 'error') notify('PhoneDrop', event.message);
+      changed();
+    },
+  });
+  sync.setPaused(!!config.paused);
+}
+
+function restartServices() {
+  restarting = restarting.then(startServices).catch((err) => {
+    hubError = err.message;
+    changed();
+  });
+  return restarting;
+}
+
+// At home: the hub's Wi-Fi addresses. Away: its Tailscale address.
+function candidates() {
+  if (config.role === 'hub') return [{ url: `ws://localhost:${PORT}/ws`, tier: 0 }];
+  return hubCandidates(config.endpoints, { extra: [config.hubAddress] });
+}
+
+// What the popup shows.
+function view() {
+  const devices = [...new Map([...(sync?.state.devices.values() ?? [])].map((d) => [d.id, d])).values()];
+  const clips = (sync?.state.recent ?? []).filter((c) => c.kind !== 'file').slice(0, 8)
+    .map((c) => ({ id: c.id, kind: c.kind, text: c.text, size: c.size, from: c.from, mine: c.fromId === config.deviceId }));
+  return {
+    configured: isConfigured(),
+    status: sync?.state.status ?? 'offline',
+    via: sync?.state.via,
+    paused: !!config.paused,
+    hubError,
+    role: config.role,
+    device: config.device,
+    devices,
+    clips,
+    received,
+    sent,
+  };
+}
+
+let changeQueued = false;
+function changed() {
+  if (changeQueued) return;
+  changeQueued = true;
+  setImmediate(() => {
+    changeQueued = false;
+    win?.webContents.send('state', view());
+    renderTrayMenu();
+  });
+}
+
+// --- Files ------------------------------------------------------------------
 
 function uniquePath(dir, name) {
   name = path.basename(name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'file';
@@ -32,12 +165,33 @@ function uniquePath(dir, name) {
   return p;
 }
 
-const outbox = [];
-let nextId = 1;
-const devices = new Map(); // id -> { id, name, lastSeen }
-const ONLINE_MS = 7000;
+function saveFile({ name, bytes }) {
+  fs.mkdirSync(saveDir, { recursive: true });
+  const dest = uniquePath(saveDir, name);
+  fs.writeFileSync(dest, bytes);
+  return dest;
+}
 
-const summary = () => outbox.map(({ id, name, size, to, path }) => ({ id, name, size, to, path }));
+function notify(title, body, onClick) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, silent: true });
+  if (onClick) n.on('click', onClick);
+  n.show();
+}
+
+// `to` = a device id, or null for all your devices.
+async function sendFiles(paths, to = null) {
+  if (!sync) return { error: 'Set up PhoneDrop first' };
+  for (const p of paths) {
+    try {
+      if (fs.statSync(p).isFile()) await sync.sendFile(p, { to });
+    } catch (err) {
+      notify("Couldn't send file", err.message);
+      return { error: err.message };
+    }
+  }
+  return { ok: true };
+}
 
 // Uses the OS thumbnailer (handles HEIC etc. when codecs are installed); null if not an image
 async function thumbnail(p, size) {
@@ -47,107 +201,32 @@ async function thumbnail(p, size) {
   } catch { return null; }
 }
 
-function deviceName(ua, kind) {
-  // iPadOS Safari reports itself as a Mac, so the page tells us what it really is
-  if (kind === 'ipad') return 'iPad';
-  if (kind === 'iphone') return 'iPhone';
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Android/.test(ua)) return 'Android phone';
-  return 'Browser';
-}
+// --- Phone setup info -------------------------------------------------------
 
-function touchDevice(id, ua, kind) {
-  if (!id) return;
-  let d = devices.get(id);
-  if (!d) {
-    d = { id, name: deviceName(ua || '', kind), lastSeen: 0 };
-    const same = [...devices.values()].filter((x) => x.name.replace(/ d+$/, '') === d.name).length;
-    if (same) d.name += ' ' + (same + 1);
-    devices.set(id, d);
-  }
-  d.lastSeen = Date.now();
-}
-
-function onlineDevices() {
-  return [...devices.values()].filter((d) => Date.now() - d.lastSeen < ONLINE_MS);
-}
-
-// `to` = device id, or null to make the file available to every device
-function addToOutbox(paths, to = null) {
-  for (const p of paths) {
-    try {
-      const st = fs.statSync(p);
-      if (!st.isFile()) continue;
-      outbox.push({ id: nextId++, name: path.basename(p), size: st.size, path: p, to });
-    } catch {}
-  }
-  return summary();
-}
-
-function startServer() {
-  const page = fs.readFileSync(path.join(__dirname, 'renderer', 'phone.html'));
-  http.createServer(async (req, res) => {
-    if (req.method === 'GET' && req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(page);
-    }
-    if (req.method === 'GET' && req.url.startsWith('/files')) {
-      const d = new URL(req.url, 'http://x').searchParams.get('d');
-      const q = new URL(req.url, 'http://x').searchParams;
-      touchDevice(d, req.headers['user-agent'], q.get('k'));
-      const files = outbox.filter((o) => o.to === null || o.to === d).map(({ id, name, size }) => ({ id, name, size }));
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify({ pc: os.hostname(), files }));
-    }
-    if (req.method === 'GET' && req.url.startsWith('/preview/')) {
-      const f = outbox.find((o) => o.id === Number(req.url.slice(9)));
-      const img = f && (await thumbnail(f.path, 320));
-      if (!img) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=300' });
-      return res.end(img.toJPEG(80));
-    }
-    const dl = req.method === 'GET' && req.url.match(/^\/download\/(\d+)$/);
-    if (dl) {
-      const f = outbox.find((o) => o.id === Number(dl[1]));
-      if (!f || !fs.existsSync(f.path)) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, {
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': fs.statSync(f.path).size,
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`,
-      });
-      return fs.createReadStream(f.path).pipe(res);
-    }
-    if (req.method === 'PUT' && req.url === '/upload') {
-      fs.mkdirSync(saveDir, { recursive: true });
-      const name = decodeURIComponent(req.headers['x-filename'] || 'file');
-      const dest = uniquePath(saveDir, name);
-      const out = fs.createWriteStream(dest);
-      req.pipe(out);
-      out.on('finish', () => {
-        win && win.webContents.send('received', { name: path.basename(dest), size: fs.statSync(dest).size, path: dest });
-        res.writeHead(200); res.end('ok');
-      });
-      out.on('error', () => { res.writeHead(500); res.end('error'); });
-      req.on('aborted', () => { out.destroy(); fs.unlink(dest, () => {}); });
-      return;
-    }
-    res.writeHead(404); res.end();
-  }).listen(PORT, '0.0.0.0');
+// The phone sets itself up from the hub's plain-HTTP page (the QR code).
+function phoneUrl() {
+  if (config.role === 'join' && config.hubAddress) return config.hubAddress.replace(/^https:/, 'http:');
+  return `http://${localHostname()}:${PORT}`;
 }
 
 async function info() {
-  const ip = lanAddresses()[0] || 'localhost';
-  const url = `http://${ip}:${PORT}`;
-  return { url, qr: await QRCode.toDataURL(url, { margin: 1, width: 240 }), saveDir, pc: os.hostname() };
+  const url = phoneUrl();
+  return {
+    url,
+    ips: config.role === 'join' ? [] : lanAddresses().map((ip) => `http://${ip}:${PORT}`),
+    qr: await QRCode.toDataURL(url, { margin: 1, width: 440 }),
+    saveDir,
+    pc: config.device || computerName(),
+  };
 }
 
-const ICON = path.join(__dirname, 'icon.png');
+// --- Popup window -----------------------------------------------------------
+
+let win;
 let tray;
 let quitting = false;
-
-const POPUP = { width: 400, height: 600 };
-let pinned = false;     // keep the popup open when it loses focus (needed to drag files in from Explorer)
+const POPUP = { width: 400, height: 640 };
+let pinned = false;     // keep the popup open when it loses focus (needed to drag files in)
 let dialogOpen = false; // native file dialogs steal focus; don't hide while one is open
 
 // Pops the window up next to the tray icon, like a menu-bar app
@@ -160,104 +239,189 @@ function showWindow() {
   x = Math.min(Math.max(x, wa.x + 8), wa.x + wa.width - POPUP.width - 8);
   y = Math.min(Math.max(y, wa.y + 8), wa.y + wa.height - POPUP.height - 8);
   win.setBounds({ x, y, ...POPUP });
+  if (isMac) app.focus({ steal: true });
   win.show();
   win.focus();
 }
 const toggleWindow = () => (win.isVisible() ? win.hide() : showWindow());
 
+function openSettings() {
+  showWindow();
+  win.webContents.send('open-settings');
+}
+
+// --- Start at login ---------------------------------------------------------
 // Registers this app to launch at login, hidden in the tray. Works for both
-// the dev setup (electron.exe + app path) and a packaged build.
+// the dev setup (electron + app path) and a packaged build.
+
+const loginArgs = () => (app.isPackaged ? ['--hidden'] : [app.getAppPath(), '--hidden']);
 function setAutoStart(on) {
-  app.setLoginItemSettings({
-    openAtLogin: on,
-    path: process.execPath,
-    args: app.isPackaged ? ['--hidden'] : [app.getAppPath(), '--hidden'],
-  });
+  app.setLoginItemSettings({ openAtLogin: on, path: process.execPath, args: loginArgs() });
 }
 const autoFlag = () => (app.isPackaged ? 'autoStartPackaged' : 'autoStartSet');
-const autoStartEnabled = () => app.getLoginItemSettings({
-  path: process.execPath,
-  args: app.isPackaged ? ['--hidden'] : [app.getAppPath(), '--hidden'],
-}).openAtLogin;
+const autoStartEnabled = () => app.getLoginItemSettings({ path: process.execPath, args: loginArgs() }).openAtLogin;
 
-function buildTray() {
-  tray = new Tray(ICON);
-  tray.setToolTip('PhoneDrop');
-  tray.on('click', toggleWindow);
-  const render = () => tray.setContextMenu(Menu.buildFromTemplate([
+// --- Tray -------------------------------------------------------------------
+
+function trayIcon() {
+  if (!isMac) return ICON;
+  const icon = nativeImage.createFromPath(path.join(ROOT, 'icons', 'trayTemplate.png'));
+  icon.setTemplateImage(true);
+  return icon;
+}
+
+let trayMenu;
+function renderTrayMenu() {
+  if (!tray) return;
+  trayMenu = Menu.buildFromTemplate([
     { label: 'Open PhoneDrop', click: showWindow },
     { label: 'Open received folder', click: () => shell.openPath(saveDir) },
     { type: 'separator' },
     {
-      label: 'Start with Windows', type: 'checkbox', checked: autoStartEnabled(),
+      label: 'Pause clipboard sync', type: 'checkbox', checked: !!config.paused, enabled: isConfigured(),
+      click: (item) => setPaused(item.checked),
+    },
+    { label: 'Settings…', click: openSettings },
+    {
+      label: isMac ? 'Open at login' : 'Start with Windows', type: 'checkbox', checked: autoStartEnabled(),
       click: (item) => {
         setAutoStart(item.checked);
-        saveConfig({ ...loadConfig(), [autoFlag()]: item.checked });
-        render();
+        config[autoFlag()] = item.checked;
+        saveConfig();
+        renderTrayMenu();
       },
     },
     { type: 'separator' },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
-  ]));
-  render();
+  ]);
 }
 
+function buildTray() {
+  tray = new Tray(trayIcon());
+  tray.setToolTip('PhoneDrop');
+  tray.on('click', toggleWindow);
+  tray.on('right-click', () => tray.popUpContextMenu(trayMenu));
+  // Mac: drop files on the menu-bar icon to send them
+  tray.on('drop-files', (_e, files) => {
+    const devices = view().devices;
+    sendFiles(files, devices.length === 1 ? devices[0].id : null);
+  });
+  renderTrayMenu();
+}
+
+function setPaused(paused) {
+  config.paused = !!paused;
+  saveConfig();
+  sync?.setPaused(config.paused);
+  changed();
+}
+
+// --- IPC --------------------------------------------------------------------
+
+ipcMain.handle('info', info);
+ipcMain.handle('state', view);
+ipcMain.handle('settings', () => ({
+  role: config.role || 'hub',
+  hubAddress: config.hubAddress || '',
+  device: config.device || computerName(),
+  hasPassphrase: !!config.passphrase,
+  configured: isConfigured(),
+  thisHub: { url: `http://${localHostname()}:${PORT}`, tailscale: tailscaleAddresses() },
+  awayAddresses: (config.endpoints?.tailscale || []).map((u) => new URL(u).hostname),
+}));
+ipcMain.handle('saveSettings', async (_e, input) => {
+  const next = { ...config };
+  next.role = input.role === 'join' ? 'join' : 'hub';
+  if (next.role === 'join') {
+    try {
+      next.hubAddress = normalizeHubAddress(input.hubAddress || '');
+    } catch {
+      return { ok: false, error: "That hub address doesn't look right. Try something like My-Mac.local" };
+    }
+  }
+  if (next.role !== config.role || next.hubAddress !== config.hubAddress) delete next.endpoints; // a different hub
+  next.device = (input.device || '').trim().slice(0, 40);
+  if (!next.device) return { ok: false, error: 'Give this computer a name.' };
+  if (input.passphrase) {
+    if (input.passphrase.length < 8) return { ok: false, error: 'Use a passphrase of at least 8 characters.' };
+    next.passphrase = input.passphrase;
+  }
+  if (!next.passphrase) return { ok: false, error: 'Choose a passphrase.' };
+  config = next;
+  saveConfig();
+  await restartServices();
+  return hubError ? { ok: false, error: hubError } : { ok: true, hubAddress: config.hubAddress };
+});
+ipcMain.handle('setPaused', (_e, v) => setPaused(v));
+ipcMain.handle('setPinned', (_e, v) => { pinned = !!v; return pinned; });
+ipcMain.handle('hide', () => win.hide());
+ipcMain.handle('openFolder', () => shell.openPath(saveDir));
+ipcMain.handle('showFile', (_e, p) => shell.showItemInFolder(p));
+ipcMain.handle('thumb', async (_e, p, size = 96) => {
+  const img = await thumbnail(p, size);
+  return img ? img.toDataURL() : null;
+});
+ipcMain.handle('sendFiles', (_e, paths, to) => sendFiles(paths, to));
+ipcMain.handle('pickFiles', async (_e, to) => {
+  dialogOpen = true;
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] }).finally(() => { dialogOpen = false; });
+  return r.canceled ? { ok: true } : sendFiles(r.filePaths, to);
+});
+// Clicking a clip in the Clipboard list copies it again.
+ipcMain.handle('copyClip', async (_e, id) => {
+  const clip = sync?.state.recent.find((c) => c.id === id);
+  if (!clip) return;
+  if (clip.kind === 'image') writeClipboard({ kind: 'image', png: await sync.getData(clip) });
+  else writeClipboard({ kind: 'text', text: clip.text });
+});
+ipcMain.handle('chooseFolder', async () => {
+  dialogOpen = true;
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: saveDir }).finally(() => { dialogOpen = false; });
+  if (!r.canceled) {
+    saveDir = r.filePaths[0];
+    config.saveDir = saveDir;
+    saveConfig();
+  }
+  return info();
+});
+
+// --- Startup ----------------------------------------------------------------
+
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  app.exit(0);
 } else {
   app.on('second-instance', showWindow);
 }
 
-app.whenReady().then(() => {
-  if (!app.hasSingleInstanceLock()) return;
-  saveDir = loadConfig().saveDir || path.join(app.getPath('pictures'), 'PhoneDrop');
+app.whenReady().then(async () => {
+  if (isMac) app.dock?.hide();
+  config.deviceId ??= crypto.randomBytes(8).toString('hex');
+  saveDir = config.saveDir || path.join(app.getPath('pictures'), 'PhoneDrop');
   fs.mkdirSync(saveDir, { recursive: true });
-  startServer();
+  // On by default; re-applied each launch so the registered path follows the install location
+  if (app.isPackaged && config[autoFlag()] !== false) {
+    setAutoStart(true);
+    config[autoFlag()] = true;
+  }
+  saveConfig();
+
   win = new BrowserWindow({
     ...POPUP, title: 'PhoneDrop', icon: ICON, show: false,
     frame: false, resizable: false, maximizable: false, minimizable: false,
     skipTaskbar: true, alwaysOnTop: true, fullscreenable: false,
     backgroundColor: '#000000',
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
+    webPreferences: { preload: path.join(ROOT, 'preload.cjs'), contextIsolation: true, sandbox: true },
   });
   win.on('blur', () => { if (!pinned && !dialogOpen) win.hide(); });
   win.on('close', (e) => {
     if (!quitting) { e.preventDefault(); win.hide(); }
   });
   buildTray();
-  // First run: turn on start-with-Windows by default (toggle it from the tray menu)
-  const cfg = loadConfig();
-  // On by default; re-applied each launch so the registered path follows the install location
-  if (app.isPackaged && cfg[autoFlag()] !== false) { setAutoStart(true); saveConfig({ ...cfg, [autoFlag()]: true }); }
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // Normally stays hidden until the tray icon is clicked; a manual launch shows it once
-  if (!process.argv.includes('--hidden')) win.once('ready-to-show', showWindow);
-  ipcMain.handle('setPinned', (_, v) => { pinned = !!v; return pinned; });
-  ipcMain.handle('hide', () => win.hide());
-  ipcMain.handle('info', info);
-  ipcMain.handle('openFolder', () => shell.openPath(saveDir));
-  ipcMain.handle('showFile', (_, p) => shell.showItemInFolder(p));
-  ipcMain.handle('thumb', async (_, p, size = 96) => {
-    const img = await thumbnail(p, size);
-    return img ? img.toDataURL() : null;
-  });
-  ipcMain.handle('addFiles', (_, paths, to) => addToOutbox(paths, to));
-  ipcMain.handle('devices', () => ({ devices: onlineDevices(), outbox: summary() }));
-  ipcMain.handle('pickFiles', async (_, to) => {
-    dialogOpen = true;
-    const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] }).finally(() => { dialogOpen = false; });
-    return addToOutbox(r.canceled ? [] : r.filePaths, to);
-  });
-  ipcMain.handle('removeFile', (_, id) => {
-    const i = outbox.findIndex((o) => o.id === id);
-    if (i >= 0) outbox.splice(i, 1);
-    return summary();
-  });
-  ipcMain.handle('chooseFolder', async () => {
-    dialogOpen = true;
-    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: saveDir }).finally(() => { dialogOpen = false; });
-    if (!r.canceled) { saveDir = r.filePaths[0]; saveConfig({ ...loadConfig(), saveDir }); }
-    return info();
-  });
+  win.loadFile(path.join(ROOT, 'renderer', 'index.html'));
+  // Normally stays hidden until the tray icon is clicked; a manual launch (or first run) shows it once
+  const atLogin = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+  if (!atLogin || !isConfigured()) win.once('ready-to-show', isConfigured() ? showWindow : openSettings);
+  await restartServices();
 });
-app.on('before-quit', () => { quitting = true; });
+app.on('window-all-closed', () => {}); // keep running in the tray
+app.on('before-quit', () => { quitting = true; stopServices(); });

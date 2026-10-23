@@ -1,15 +1,19 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   info: () => ipcRenderer.invoke('info'),
+  state: () => ipcRenderer.invoke('state'),
+  onState: (cb) => ipcRenderer.on('state', (_, s) => cb(s)),
+  onOpenSettings: (cb) => ipcRenderer.on('open-settings', () => cb()),
+  settings: () => ipcRenderer.invoke('settings'),
+  saveSettings: (s) => ipcRenderer.invoke('saveSettings', s),
+  setPaused: (v) => ipcRenderer.invoke('setPaused', v),
   openFolder: () => ipcRenderer.invoke('openFolder'),
   showFile: (p) => ipcRenderer.invoke('showFile', p),
   chooseFolder: () => ipcRenderer.invoke('chooseFolder'),
-  onReceived: (cb) => ipcRenderer.on('received', (_, f) => cb(f)),
-  devices: () => ipcRenderer.invoke('devices'),
   pickFiles: (to) => ipcRenderer.invoke('pickFiles', to),
-  addDropped: (files, to) => ipcRenderer.invoke('addFiles', [...files].map((f) => webUtils.getPathForFile(f)), to),
+  sendDropped: (files, to) => ipcRenderer.invoke('sendFiles', [...files].map((f) => webUtils.getPathForFile(f)), to),
   thumb: (p, size) => ipcRenderer.invoke('thumb', p, size),
+  copyClip: (id) => ipcRenderer.invoke('copyClip', id),
   setPinned: (v) => ipcRenderer.invoke('setPinned', v),
   hide: () => ipcRenderer.invoke('hide'),
-  removeFile: (id) => ipcRenderer.invoke('removeFile', id),
 });

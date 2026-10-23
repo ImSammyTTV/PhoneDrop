@@ -1,7 +1,8 @@
 <!doctype html><meta charset="utf-8"><title>PhoneDrop</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <style>
 @font-face{font-family:"Inter";src:url(fonts/inter.woff2) format("woff2");font-weight:100 900;font-display:block}
-:root{--blue:#4285f4;--ink:#eeeeee;--mute:#9a9aa2;--line:rgba(255,255,255,.1);--surface:rgba(255,255,255,.07);
+:root{--blue:#4285f4;--ink:#eeeeee;--mute:#9a9aa2;--line:rgba(255,255,255,.1);--surface:rgba(255,255,255,.07);--red:#ff5a52;--green:#2fb344;
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;height:100%;font:14px/1.4 var(--font);letter-spacing:-.011em;font-feature-settings:"cv11","ss03";color:var(--ink);
@@ -22,21 +23,24 @@ header h1{font-size:14px;font-weight:600;margin:0;letter-spacing:-.01em}
 .bubble svg{width:36px;height:36px;fill:none;stroke:var(--blue);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .dev:hover .bubble{transform:scale(1.05);box-shadow:0 0 0 1.5px rgba(66,133,244,.7)}
 .dev.over .bubble{transform:scale(1.14);box-shadow:0 0 0 3px var(--blue),0 0 30px rgba(66,133,244,.45)}
-.dev b{margin-top:12px;font-weight:600;font-size:15px;letter-spacing:-.016em}
+.dev b{margin-top:12px;font-weight:600;font-size:15px;letter-spacing:-.016em;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dev small{color:var(--mute);font-size:12px;min-height:16px;margin-top:1px}
 #empty{position:relative;text-align:center;padding:0 24px}
 #empty img{border-radius:14px;background:#fff;padding:8px}
 #empty h2{color:var(--blue);font-size:17px;font-weight:600;margin:0 0 14px;letter-spacing:-.014em}
 #empty p{color:var(--mute);margin:14px 0 3px;font-size:13px}
 #url{font:500 14px ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:0;color:var(--ink)}
-#hint{position:relative;color:var(--mute);margin-top:24px;font-size:13px;text-align:center}
+#hint{position:relative;color:var(--mute);margin-top:24px;font-size:13px;text-align:center;padding:0 20px}
+#hint.warn{color:var(--red)}
 #dock{position:fixed;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;align-items:stretch}
-#lists{padding:0 16px;max-height:150px;overflow:auto}
+#lists{padding:0 16px;max-height:210px;overflow:auto}
 #me{text-align:center;padding:10px 0 14px;font-size:13px;line-height:2}
 .chip{display:inline-block;padding:0 8px;border-radius:7px;background:rgba(255,255,255,.14);font-weight:500;font-size:12.5px}
 .chip.blue{background:var(--blue);color:#fff}
+.chip.red{background:rgba(255,90,82,.85);color:#fff}
 .disc{display:inline-block;border:1.5px solid rgba(255,255,255,.22);border-radius:12px;padding:0 8px;margin-top:2px}
 #lists h3{display:flex;justify-content:space-between;align-items:center;margin:10px 6px 5px;font-size:12px;font-weight:600;color:var(--mute);letter-spacing:-.005em}
+#lists h3 .link{font-size:12px}
 ul{list-style:none;padding:0;margin:0;background:rgba(28,30,36,.82);backdrop-filter:blur(20px);border-radius:10px;
   box-shadow:0 0 0 .5px rgba(255,255,255,.12);overflow:hidden}
 ul:empty{display:none}
@@ -51,17 +55,34 @@ li{padding:9px 14px;font-weight:450;align-items:center;display:flex;justify-cont
 li+li{border-top:.5px solid var(--line)}
 li:hover{background:rgba(66,133,244,.14)}
 li span:last-child{color:var(--mute);white-space:nowrap;font-size:13px;font-weight:400}
-#outbox li{cursor:default}#outbox li:hover{background:none}#outbox b{cursor:pointer;color:#ff5a52;padding-left:8px;font-weight:500}
-#conn{display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);backdrop-filter:blur(30px);z-index:10;padding-top:44px;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#sent li{cursor:default}#sent li:hover{background:none}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);backdrop-filter:blur(30px);z-index:10;padding-top:44px;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 #conn img{padding:10px;background:#fff}
 #dir{font-size:11px;color:var(--mute);word-break:break-all;max-width:360px;margin:10px 0 14px}
+#settings{justify-content:flex-start;text-align:left;padding:56px 22px 18px;overflow:auto}
+#settings h2{font-size:17px;font-weight:600;margin:0 0 4px;letter-spacing:-.014em;width:100%}
+#settings form{display:grid;gap:12px;width:100%}
+.choice{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border-radius:10px;padding:9px 12px;cursor:pointer;box-shadow:0 0 0 .5px rgba(255,255,255,.12)}
+.choice:has(input:checked){box-shadow:0 0 0 1.5px var(--blue)}
+.choice input{margin-top:3px;accent-color:var(--blue)}
+.choice small,.hint{display:block;color:var(--mute);font-size:12px;font-weight:400}
+label.field{display:grid;gap:5px;font-weight:600;font-size:13px}
+input[type=text],input[type=password]{font:inherit;color:inherit;background:var(--surface);border:0;border-radius:8px;padding:8px 10px;width:100%;
+  box-shadow:0 0 0 .5px rgba(255,255,255,.16);user-select:text}
+input:focus-visible{outline:1.5px solid var(--blue)}
+.addr{font:500 12.5px ui-monospace,Menlo,Consolas,monospace;background:var(--surface);border-radius:8px;padding:7px 10px;user-select:text;word-break:break-all}
+#msg{font-size:13px;margin:0}#msg.error{color:var(--red)}#msg.ok{color:var(--green)}
 button.btn{border:0;border-radius:7px;padding:6px 16px;margin:4px;background:var(--blue);color:#fff;font:inherit;font-weight:500;cursor:pointer}
 button.btn:hover{filter:brightness(1.1)}
 button.btn:active{filter:brightness(.9)}
 button.alt{background:rgba(255,255,255,.14);color:var(--ink)}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+[hidden]{display:none!important}
 .over-all #stage{background:rgba(66,133,244,.08)}
 </style>
-<header><h1>PhoneDrop</h1><span><button class="link" id="showConn">Connect</button><button class="link" id="pin" title="Keep open when clicking elsewhere (lets you drag files in from Explorer)">Pin</button></span></header>
+<header><h1>PhoneDrop</h1><span>
+  <button class="link" id="showConn">Connect</button><button class="link" id="pin" title="Keep open when clicking elsewhere (lets you drag files in)">Pin</button><button class="link" id="showSettings">Settings</button>
+</span></header>
 
 <div id="stage">
   <svg id="rings"></svg>
@@ -77,114 +98,39 @@ button.alt{background:rgba(255,255,255,.14);color:var(--ink)}
 </div>
 
 <div id="dock"><div id="lists">
-  <div id="outboxWrap" style="display:none"><h3>Waiting to be picked up</h3><ul id="outbox"></ul></div>
-  <h3>Received <button class="link" id="open" style="text-transform:none;letter-spacing:0;font-size:12px">Open folder</button></h3>
+  <div id="clipsWrap" hidden><h3>Clipboard <button class="link" id="pause"></button></h3><ul id="clips"></ul></div>
+  <div id="sentWrap" hidden><h3>Sent</h3><ul id="sent"></ul></div>
+  <h3>Received <button class="link" id="open">Open folder</button></h3>
   <ul id="list"></ul>
 </div>
-<div id="me">You are known as: <span class="chip" id="pcname">…</span><br><span class="disc">You can be discovered: <span class="chip blue">on this network</span></span></div></div>
+<div id="me">You are known as: <span class="chip" id="pcname">…</span><br><span class="disc">Status: <span class="chip" id="status">…</span></span></div></div>
 
 <div id="lb"><img id="lbimg"><div class="cap"><span id="lbname"></span> &nbsp; <button class="btn" id="lbshow">Show in folder</button><button class="btn alt" id="lbclose">Close</button></div></div>
 
-<div id="conn">
+<div id="conn" class="overlay">
   <img id="qr2" width="220" height="220" style="border-radius:16px">
   <p style="color:var(--mute);margin:10px 0 2px">Scan with your iPhone or iPad camera, or open</p>
   <div id="url2" style="font:500 13px ui-monospace,Menlo,Consolas,monospace"></div>
+  <div id="ips" style="font-size:11px;color:var(--mute);margin-top:4px"></div>
+  <p style="color:var(--mute);font-size:12px;max-width:320px;margin:10px 0 0">The first time, the page walks your iPhone or iPad through a one-time certificate install, so PhoneDrop can work securely.</p>
   <div id="dir"></div>
   <div><button class="btn alt" id="change">Change save folder</button><button class="btn" id="closeConn">Done</button></div>
 </div>
 
-<script>
-const $=id=>document.getElementById(id);
-const PHONE='<svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>';
-const TABLET='<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M11 18h2"/></svg>';
-let state={devices:[],outbox:[]};
-// Concentric rings fanning out from the bottom centre (SVG so lines stay crisp)
-(function(){
-  const svg=$('rings'),NS='http://www.w3.org/2000/svg';
-  const cx=innerWidth/2,cy=innerHeight-62,far=Math.hypot(innerWidth,innerHeight);
-  const mk=(r,attrs)=>{const c=document.createElementNS(NS,'circle');c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r',r);
-    for(const k in attrs)c.setAttribute(k,attrs[k]);svg.append(c);return c};
-  for(let k=1;k*170<far+170;k++){
-    const c=mk(k*170,{stroke:'#fff','stroke-width':1,'stroke-opacity':.1});
-    c.animate([{strokeOpacity:.07},{strokeOpacity:.22},{strokeOpacity:.07}],{duration:5000,iterations:Infinity,delay:-k*350})}
-  for(let k=0;k<3;k++){
-    const w=mk(10,{stroke:'#4285f4','stroke-width':1.5,'stroke-opacity':0});
-    w.animate([{r:'10px',strokeOpacity:.85},{r:far+'px',strokeOpacity:0}],
-      {duration:6000,iterations:Infinity,delay:-k*2000,easing:'cubic-bezier(.2,.5,.4,1)'})}
-})();
-function show(i){
-  $('qr').src=i.qr;$('qr2').src=i.qr;$('url').textContent=i.url;$('url2').textContent=i.url;
-  $('dir').textContent='Saving to: '+i.saveDir;$('pcname').textContent=i.pc}
-api.info().then(show);
-$('open').onclick=()=>api.openFolder();
-$('change').onclick=()=>api.chooseFolder().then(show);
-let pinned=false;
-$('pin').onclick=()=>{pinned=!pinned;api.setPinned(pinned);$('pin').textContent=pinned?'Unpin':'Pin'};
-$('showConn').onclick=()=>$('conn').style.display='flex';
-$('closeConn').onclick=()=>$('conn').style.display='none';
+<div id="settings" class="overlay">
+  <h2>Settings</h2>
+  <p class="hint" style="margin:0 0 14px">Use the same passphrase on every device. Everything is encrypted with it.</p>
+  <form id="form">
+    <div style="display:grid;gap:8px">
+      <label class="choice"><input type="radio" name="role" value="hub"><span>This computer is the hub<small>Your other devices connect to it. Pick this on the one that's on most.</small></span></label>
+      <label class="choice"><input type="radio" name="role" value="join"><span>Connect to a hub<small>Another computer already runs PhoneDrop as the hub.</small></span></label>
+    </div>
+    <div id="hubInfo"><div class="hint" style="margin-bottom:4px">Other devices connect to</div><div class="addr" id="thisHub"></div><span class="hint" id="hubAway" style="margin-top:6px"></span></div>
+    <label class="field" id="hubField">Hub address<input id="hubAddress" type="text" placeholder="e.g. My-Mac.local" spellcheck="false"><span class="hint" id="joinAway"></span></label>
+    <label class="field">Passphrase<input id="passphrase" type="password" autocomplete="new-password"><span class="hint">At least 8 characters.</span></label>
+    <label class="field">Name for this computer<input id="device" type="text" maxlength="40" spellcheck="false"></label>
+    <div class="row"><button class="btn" type="submit" id="save" style="margin-left:0">Save</button><button class="btn alt" type="button" id="closeSettings">Close</button><p id="msg"></p></div>
+  </form>
+</div>
 
-// Thumbnails come from the OS thumbnailer in the main process; blank if not an image
-function thumb(path,size,img){api.thumb(path,size).then(u=>{if(u)img.src=u;else img.classList.add('blank')})}
-function row(name,right,path){const li=document.createElement('li');
-  li.innerHTML='<span class="l"><img class="th blank"><span class="nm"></span></span><span></span>';
-  li.querySelector('.nm').textContent=name;li.lastChild.innerHTML=right;
-  if(path){const im=li.querySelector('.th');im.classList.remove('blank');thumb(path,68,im)}
-  return li}
-async function openLightbox(f){
-  const u=await api.thumb(f.path,1600);if(!u){api.showFile(f.path);return}
-  $('lbimg').src=u;$('lbname').textContent=f.name;$('lb').style.display='flex';
-  $('lbshow').onclick=()=>api.showFile(f.path)}
-$('lbclose').onclick=()=>$('lb').style.display='none';
-$('lb').onclick=e=>{if(e.target.id==='lb')$('lb').style.display='none'};
-addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('lb').style.display==='flex')$('lb').style.display='none';else if($('conn').style.display==='flex')$('conn').style.display='none';else api.hide()});
-const mb=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.ceil(n/1024)+' KB';
-
-function render(){
-  const {devices,outbox}=state;
-  $('empty').style.display=devices.length?'none':'block';
-  $('hint').textContent=devices.length?'Drop files onto a device, or click it to choose files':'';
-  const box=$('devs');
-  if(box.dataset.sig!==devices.map(d=>d.id).join()){
-    box.dataset.sig=devices.map(d=>d.id).join();box.innerHTML='';
-    for(const d of devices){
-      const el=document.createElement('div');el.className='dev';el.dataset.id=d.id;
-      el.innerHTML='<div class="bubble">'+(d.name.startsWith('iPad')?TABLET:PHONE)+'</div><b></b><small></small>';
-      el.querySelector('b').textContent=d.name;
-      el.onclick=()=>api.pickFiles(d.id).then(o=>{state.outbox=o;render()});
-      el.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();el.classList.add('over')});
-      el.addEventListener('dragleave',()=>el.classList.remove('over'));
-      el.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();el.classList.remove('over');
-        document.body.classList.remove('over-all');
-        api.addDropped(e.dataTransfer.files,d.id).then(o=>{state.outbox=o;render()})});
-      box.append(el);
-    }
-  }
-  for(const el of box.children){
-    const n=outbox.filter(o=>o.to===el.dataset.id||o.to===null).length;
-    el.querySelector('small').textContent=n?n+' file'+(n>1?'s':'')+' waiting':'Ready';
-  }
-  const ul=$('outbox');ul.innerHTML='';
-  $('outboxWrap').style.display=outbox.length?'block':'none';
-  for(const f of outbox){
-    const dev=devices.find(d=>d.id===f.to);
-    const li=row(f.name,mb(f.size)+' → '+(f.to===null?'any device':dev?dev.name:'offline')+' <b title="Remove">✕</b>',f.path);
-    li.querySelector('b').onclick=()=>api.removeFile(f.id).then(o=>{state.outbox=o;render()});
-    ul.append(li);
-  }
-}
-// Keep the device bubbles clear of the lists docked at the bottom
-new ResizeObserver(()=>{$('stage').style.paddingBottom=$('dock').offsetHeight+'px'}).observe($('dock'));
-async function tick(){state=await api.devices();render()}
-tick();setInterval(tick,1500);
-
-// Dropping anywhere: goes to the only device, or hint to drop on one
-addEventListener('dragover',e=>{e.preventDefault();document.body.classList.add('over-all')});
-addEventListener('dragleave',e=>{if(!e.relatedTarget)document.body.classList.remove('over-all')});
-addEventListener('drop',e=>{e.preventDefault();document.body.classList.remove('over-all');
-  if(state.devices.length===1)api.addDropped(e.dataTransfer.files,state.devices[0].id).then(o=>{state.outbox=o;render()});
-  else if(!state.devices.length)api.addDropped(e.dataTransfer.files,null).then(o=>{state.outbox=o;render()});
-  else $('hint').textContent='Drop the files onto a specific device'});
-
-api.onReceived(f=>{const li=row(f.name,mb(f.size),f.path);
-li.onclick=()=>openLightbox(f);$('list').prepend(li)});
-</script>
+<script src="popup.js"></script>
