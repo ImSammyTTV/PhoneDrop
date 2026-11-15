@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: a malformed message or connection request from another device on the network could freeze the hub
+  (the computer other devices connect to) until PhoneDrop was restarted.
+- Updated Electron to 45.3.2 and other dependencies, including a security fix in node-forge.
+- Added automated checks (GitHub Actions) and weekly dependency updates (Dependabot).
+
 ## 2.1.0
 
 - **Updates**, opt-in: turn on *Check for updates automatically* in Settings, or choose *Check for updates…* from the tray menu.

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Syntax check
+        run: |
+          for f in main.js preload.cjs gen-icon.cjs core/*.js server/*.js shared/*.js renderer/*.js web/*.js scripts/*.js; do
+            node --check "$f"
+          done
+      - name: Package (Linux)
+        run: npx electron-builder --linux dir --publish never

@@ -14,15 +14,15 @@
     "icons": "node scripts/make-icons.js && node gen-icon.cjs"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9",
-    "node-forge": "^1.4.0",
+    "electron-updater": "^6.8.11",
+    "node-forge": "^1.4.3",
     "qrcode": "^1.5.4",
-    "ws": "^8.18.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "electron": "^45.0.0",
-    "electron-builder": "^26.15.3"
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "com.sam.phonedrop",

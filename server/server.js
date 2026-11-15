@@ -244,7 +244,7 @@ export async function startHub({
       } catch {
         return;
       }
-      if (![msg.iv, msg.ct].every((v) => typeof v === 'string')) return;
+      if (![msg?.iv, msg?.ct].every((v) => typeof v === 'string')) return; // also rejects `null`
 
       // A device announcing itself (name and type, encrypted): passed on, never stored.
       if (msg.type === 'presence' && msg.ct.length < 4096) {
@@ -274,7 +274,10 @@ export async function startHub({
   });
 
   function handleUpgrade(req, socket, head) {
-    const { pathname } = new URL(req.url, 'http://localhost');
+    let pathname;
+    try {
+      ({ pathname } = new URL(req.url, 'http://localhost'));
+    } catch {} // a malformed URL (e.g. "//[") must not throw in the main process
     if (pathname !== '/ws' || !isAllowedAddress(req.socket.remoteAddress)) {
       socket.destroy();
       return;
