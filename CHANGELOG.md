@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.1
+
+- Downloads are now built by GitHub Actions from the public source code, getting PhoneDrop ready for code signing.
+  Nothing changes in the app itself.
+
 ## 2.1.0
 
 - **Updates**, opt-in: turn on *Check for updates automatically* in Settings, or choose *Check for updates…* from the tray menu.
