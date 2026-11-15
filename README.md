@@ -251,6 +251,24 @@ updates through `latest.yml`; Macs read the release list and download the `-arm6
 
 ---
 
+## 🔏 Code signing policy
+
+<details>
+<summary>How Windows downloads are signed</summary>
+
+Windows releases will be signed once the project's application to SignPath Foundation is approved.
+When they are:
+
+- Free code signing is provided by [SignPath.io](https://about.signpath.io), with the certificate by [SignPath Foundation](https://signpath.org).
+- Only builds made by this repository's [GitHub Actions release workflow](.github/workflows/release.yml) from its public source code are signed.
+- **Committers and reviewers:** [ImSammyTTV](https://github.com/ImSammyTTV)
+- **Approver:** [ImSammyTTV](https://github.com/ImSammyTTV). Every signing request is approved manually.
+- **Privacy:** files and clipboard only travel between your own devices. PhoneDrop contacts the internet only to check
+  GitHub for updates, and only if you turn that on or choose *Check for updates…*.
+</details>
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE) © ImSammyTTV. See the [changelog](CHANGELOG.md) for what's new.
