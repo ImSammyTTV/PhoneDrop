@@ -1,0 +1,81 @@
+# Builds the Windows installer and the Mac .dmg in GitHub Actions and publishes a release.
+# Push a tag like v2.2.0, or run it from the Actions tab ("Run workflow") with a version.
+# The version must match "version" in package.json and have a "## 2.2.0" section in CHANGELOG.md.
+# Builds happen here (not on a PC) so they can be code-signed by SignPath later.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. v2.2.0"
+        required: true
+permissions:
+  contents: write
+env:
+  TAG: ${{ inputs.version || github.ref_name }}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches package.json
+        run: |
+          want="v$(node -p "require('./package.json').version")"
+          [ "$TAG" = "$want" ] || { echo "Tag $TAG does not match package.json ($want)" >&2; exit 1; }
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v h="## ${TAG#v}" '$0==h{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "No '## ${TAG#v}' section in CHANGELOG.md" >&2; exit 1; }
+          cat notes.md
+      - uses: actions/upload-artifact@v4
+        with: { name: notes, path: notes.md }
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run dist:win
+      # Installer, blockmap and latest.yml (the auto-updater reads latest.yml).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+
+  mac:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run dist:mac
+      - uses: actions/upload-artifact@v4
+        with: { name: mac, path: dist/*.dmg }
+
+  release:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: PhoneDrop ${{ env.TAG }}
+          body_path: out/notes.md
+          files: |
+            out/*.exe
+            out/*.blockmap
+            out/*.yml
+            out/*.dmg
